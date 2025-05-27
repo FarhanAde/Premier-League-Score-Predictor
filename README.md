@@ -1,2 +1,5 @@
-# Premier-League-Score-Predictor
+# Premier League Score Predictor
 Python ML model to predict the result of Premier League fixtures
+- Built using Pandas, Tensorflow and Keras
+- Training data compiled from past 3 seasons (2022/23, 2023/24, 2024/25, source: https://www.kaggle.com/datasets/filippomonte/premier-league-past-3-seasons)
+- Gives probability of results based on 8 input factors (including referee, matchweek and respective points going into the game)
