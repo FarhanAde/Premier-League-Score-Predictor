@@ -2,75 +2,70 @@ import csv
 import datetime
 from collections import defaultdict
 
-matches = []
-allRows = []
-
 with open('PremierLeagueMatches.csv', 'r', newline='') as file:
     myReader = csv.DictReader(file)
     headers = myReader.fieldnames
-    
-    if 'PrevHomePoints' not in headers:
-        headers.append('PrevHomePoints')
-    if 'PrevAwayPoints' not in headers:
-        headers.append('PrevAwayPoints')
-    
-    for row in myReader:
-        allRows.append(row)
-        
-        try:
-            matchDate = datetime.datetime.strptime(row['Date'], '%d-%m-%Y')
-            matches.append({
-                'date': matchDate,
-                'matchday': int(row['Matchday']),
-                'homeTeam': row['Home Team'],
-                'awayTeam': row['Away Team'],
-                'homeScore': int(row['homeScore']),
-                'awayScore': int(row['awayScore']),
-                'result': row['Result'],
-                'rowIndx': len(matches)
-            })
-        except (ValueError, KeyError) as e:
-            continue
+    allRows = list(myReader)
 
-matches.sort(key=lambda x: x['date'])
+if 'PrevHomePoints' not in headers:
+    headers.append('PrevHomePoints')
+if 'PrevAwayPoints' not in headers:
+    headers.append('PrevAwayPoints')
 
-# Identify season transitions
+# Parse matches
+matches = []
+for i, row in enumerate(allRows):
+    try:
+        matchDate = datetime.datetime.strptime(row['Date'], '%d/%m/%Y')
+        matches.append({
+            'date': matchDate,
+            'matchday': int(row['Matchday']),
+            'homeTeam': row['Home Team'],
+            'awayTeam': row['Away Team'],
+            'result': row['Result'],
+            'rowIndex': i
+        })
+    except (ValueError, KeyError) as e:
+        print(f"Error processing row {i}: {e}")
+
+# Sort by date and then by matchday to ensure chronological order
+matches.sort(key=lambda x: (x['date'], x['matchday']))
+
+# Detect season transitions
 seasons = []
 currentSzn = []
+currentSznStart = None
 
 for i, match in enumerate(matches):
-    # Start of data or matchday 1 indicates new season
-    if i == 0 or (match['matchday'] == 1 and len(currentSzn) > 0):
+    mD = match['date']
+    
+    # Detect new season: first match or big gap between matches
+    if i == 0 or (currentSzn and (mD - currentSzn[-1]['date']).days > 50):
         if currentSzn:
             seasons.append(currentSzn)
         currentSzn = [match]
+        currentSznStart = mD
     else:
         currentSzn.append(match)
 
+# Add the last season
 if currentSzn:
     seasons.append(currentSzn)
 
-# Process each season and calculate points
-pointsMap = {}
+rowToPoints = {}
 
 for season in seasons:
-    # Reset points for the new season
+    print(f"Processing season starting {season[0]['date'].strftime('%Y-%m-%d')}")
     teamPoints = defaultdict(int)
     
     for match in season:
-        # Get points before the match
         homeTeam = match['homeTeam']
         awayTeam = match['awayTeam']
-        homePoints = teamPoints[homeTeam]
-        awayPoints = teamPoints[awayTeam]
         
-        matchDate = match['date'].strftime('%d-%m-%Y')
-        
-        # Create a unique key for each match
-        key = (matchDate, homeTeam, awayTeam)
-        pointsMap[key] = {
-            'homePoints': homePoints,
-            'awayPoints': awayPoints
+        # Store pre-match points
+        rowToPoints[match['rowIndex']] = {
+            'homePoints': teamPoints[homeTeam],
+            'awayPoints': teamPoints[awayTeam]
         }
         
         if match['result'] == 'H':
@@ -81,21 +76,17 @@ for season in seasons:
             teamPoints[homeTeam] += 1
             teamPoints[awayTeam] += 1
 
-newFilename = 'PremierLeagueMatchesUpdated2.csv'
+# Write updated data back to file
+newFilename = 'PremierLeagueMatchesUpdated.csv'
 
 with open(newFilename, 'w', newline='') as file:
     myWriter = csv.DictWriter(file, fieldnames=headers)
     myWriter.writeheader()
     
-    for row in allRows:
-        date = row['Date']
-        homeTeam = row['Home Team']
-        awayTeam = row['Away Team']
-        
-        key = (date, homeTeam, awayTeam)
-        if key in pointsMap:
-            row['PrevHomePoints'] = str(pointsMap[key]['homePoints'])
-            row['PrevAwayPoints'] = str(pointsMap[key]['awayPoints'])
+    for i, row in enumerate(allRows):
+        if i in rowToPoints:
+            row['PrevHomePoints'] = str(rowToPoints[i]['homePoints'])
+            row['PrevAwayPoints'] = str(rowToPoints[i]['awayPoints'])
         else:
             row['PrevHomePoints'] = '0'
             row['PrevAwayPoints'] = '0'
